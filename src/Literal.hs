@@ -1,9 +1,3 @@
-{- |
-  Module : Literal
-  Description : A module representing a literal element in a normal form
-  Maintainer  : ???
--}
-
 module Literal(Literal(..), fromBool, fromPositive, fromNegative, neg, toFormula) where
 
 import Data.Kind
