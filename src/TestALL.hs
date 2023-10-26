@@ -1,4 +1,4 @@
-module TestG where
+module TestALL where
 
 import Debug.Trace
 import Formula
