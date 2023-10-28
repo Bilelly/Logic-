@@ -1,13 +1,17 @@
+
+
+-- Module Formula
 module Formula(Formula(..), fromBool, fromString, neg, conj, disj, implies, isLiteral, has, size, variables, Environment, evaluate, (<=>), tautology, simplify) where
 
-
+-- Importation des dépendances nécessaires
 import Data.Kind
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 
--- La structure principale de notre formule
+-- ** Définition du type de données Formula ** --
+
 data Formula 
     = Const Bool                    -- Une constante booléenne (True ou False)
     | Var String                    -- Une variable logique
@@ -15,7 +19,7 @@ data Formula
     | And Formula Formula           -- Conjonction (ET logique)
     | Or Formula Formula            -- Disjonction (OU logique)
     | Imp Formula Formula           -- Implication
-    deriving (Show, Eq)
+    deriving (Show, Eq)             -- Dérivation des instances de Show et Eq
 
 
 
@@ -24,29 +28,43 @@ data Formula
 fromBool :: Bool -> Formula
 fromBool = Const
 
+-- **Conversion d'une chaîne de caractères en variable de formule ** --
+
 fromString :: String -> Formula
 fromString = Var
 
 -- ** Opérations de Base sur les Formules ** --
 
+-- Négation d'une formule
+
 neg :: Formula -> Formula
 neg = Not
+
+-- Conjonction de deux formules
 
 conj :: Formula -> Formula -> Formula
 conj = And
 
+-- Disjonction de deux formules
+
 disj :: Formula -> Formula -> Formula
 disj = Or
+
+-- Implication de deux formules
 
 implies :: Formula -> Formula -> Formula
 implies = Imp
 
 -- ** Propriétés des Formules ** --
 
+-- Vérification si une formule est un littéral
+
 isLiteral :: Formula -> Bool
 isLiteral (Var _) = True
 isLiteral (Not (Var _)) = True
 isLiteral _ = False
+
+-- Vérification si une formule contient une variable spécifique
 
 has :: Formula -> String -> Bool
 (Var v) `has` name = v == name
@@ -56,6 +74,8 @@ has :: Formula -> String -> Bool
 (Imp f1 f2) `has` name = f1 `has` name || f2 `has` name
 _ `has` _ = False
 
+-- Calcul de la taille d'une formule
+
 size :: Formula -> Int
 size (Var _) = 0
 size (Not f) = 1 + size f
@@ -63,6 +83,8 @@ size (And f1 f2) = 1 + size f1 + size f2
 size (Or f1 f2) = 1 + size f1 + size f2
 size (Imp f1 f2) = 1 + size f1 + size f2
 size (Const _) = 0
+
+-- Récupération des variables d'une formule
 
 variables :: Formula -> Set String
 variables (Var v) = Set.singleton v
@@ -73,10 +95,12 @@ variables (Imp f1 f2) = Set.union (variables f1) (variables f2)
 variables (Const _) = Set.empty
 
 
--- Type pour les environnements (associations variable/valeur)
+-- Définition du type Environment pour représenter les associations variable/valeur
+
 type Environment = Map String Bool
 
 -- Évaluation d'une formule dans un environnement donné
+
 evaluate :: Environment -> Formula -> Maybe Bool
 evaluate env (Const b) = Just b
 evaluate env (Var v) = Map.lookup v env
@@ -94,7 +118,8 @@ evaluate env (Imp f1 f2) = do
     b2 <- evaluate env f2
     return (not b1 || b2)
 
--- Équivalence logique
+-- Vérification de l'équivalence logique de deux formules
+
 (<=>) :: Formula -> Formula -> Bool
 f <=> g = all (\env -> eval f env == eval g env) envs
   where
@@ -104,13 +129,16 @@ f <=> g = all (\env -> eval f env == eval g env) envs
       Just val -> val
       Nothing  -> error "Incomplete environment"
 
+-- Génération de tous les environnements possibles pour une liste de variables
+
 allEnvironments :: [String] -> [[(String, Bool)]]
 allEnvironments [] = [[]]
 allEnvironments (v:vs) =
   [(v, True) : env | env <- allEnvironments vs] ++
   [(v, False) : env | env <- allEnvironments vs]
 
--- Vérifier si la formule est une tautologie
+-- Vérification si une formule est une tautologie
+
 tautology :: Formula -> Bool
 tautology f = all (\env -> eval f env) envs
   where
@@ -120,7 +148,8 @@ tautology f = all (\env -> eval f env) envs
       Just val -> val
       Nothing  -> error "Incomplete environment"
 
--- Simplification (cette version est rudimentaire)
+-- Simplification d'une formule (version rudimentaire)
+
 simplify :: Formula -> Formula
 simplify (And (Const True) f) = simplify f
 simplify (And f (Const True)) = simplify f
@@ -135,5 +164,4 @@ simplify (Not (Const False)) = Const True
 simplify (Not (Not f)) = simplify f
 simplify (Imp f1 f2) = simplify (Or (Not f1) f2)
 simplify f = f  -- Pour les autres cas, on ne simplifie pas
-
 
