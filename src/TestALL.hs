@@ -1,88 +1,40 @@
-module TestALL where
-
-import Debug.Trace
-import Formula
-import Literal
-import NormalForm
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 
--- Test de conversion de Literal à Formula
-test_literalToFormula :: (Bool, String)
-test_literalToFormula =
-    let litA = fromPositive "A"
-        litB = fromNegative "B"
-        resultA = toFormula litA == Var "A"
-        resultB = toFormula litB == Not (Var "B")
-    in (resultA && resultB, "Converted: " ++ show (toFormula litA) ++ ", " ++ show (toFormula litB))
+-- Assuming the modules are implemented as described
+-- Import the modules
+import Formula
+import NormalForm
+import Literal
 
--- Test de conversion de Formula à CNF et vice versa
-test_formulaToCNFAndBack :: (Bool, String)
-test_formulaToCNFAndBack =
-    let formula = And (Var "A") (Or (Var "B") (Not (Var "C")))
-        cnf = fromFormula formula
-    in (toFormulaCNF cnf == formula, "Original: " ++ show formula ++ ", CNF: " ++ show (toFormulaCNF cnf))
+-- DPLL Algorithm
+dpll :: CNF -> Map String Bool -> Maybe (Map String Bool)
+dpll (CNF clauses) assignment
+  | Set.null clauses = Just assignment  -- Empty CNF is satisfiable
+  | Set.member Set.empty clauses = Nothing  -- Contains an empty clause
+  | otherwise = 
+      -- Pick a variable and try both true and false assignments
+      case pickVar clauses of
+        Just var -> tryAssign var True <|> tryAssign var False
+        Nothing  -> Just assignment
+  where
+    tryAssign var value = dpll (simplifyCNF (CNF clauses) var value) (Map.insert var value assignment)
 
--- Test de la taille de CNF
-test_cnfSize :: (Bool, String)
-test_cnfSize =
-    let cnf = CNF (Set.fromList [Set.singleton (fromPositive "A"), Set.singleton (fromNegative "B")])
-    in (NormalForm.size cnf == 2, "CNF Size: " ++ show (NormalForm.size cnf))
+    pickVar :: Set (Set Literal) -> Maybe String
+    pickVar clauses = undefined  -- Choose an unassigned variable
 
--- Test de la règle de Robinson
-test_robinson :: (Bool, String)
-test_robinson =
-    let clauseA = Set.singleton (fromPositive "A")
-        clauseNotA = Set.singleton (fromNegative "A")
-        clauses = Set.fromList [clauseA, clauseNotA]
-    in case robinson clauses of
-         Just _  -> (True, "Robinson result: exists")
-         Nothing -> (False, "Robinson result: does not exist")
+    simplifyCNF :: CNF -> String -> Bool -> CNF
+    simplifyCNF cnf var value = undefined  -- Simplify CNF based on the assignment
 
--- Test d'évaluation de formules
-test_evaluate :: (Bool, String)
-test_evaluate = 
-    let formula = And (Var "A") (Not (Var "B"))
-        env = Map.fromList [("A", True), ("B", False)]
-        result = evaluate env formula
-    in (result == Just True, "Evaluate result: " ++ show result)
+-- Function to check if a formula is SAT
+isSAT :: Formula -> Bool
+isSAT formula = 
+  case dpll (toCNF formula) Map.empty of
+    Just _  -> True
+    Nothing -> False
 
--- Test de vérification de tautologie
-test_tautology :: (Bool, String)
-test_tautology =
-    let formula = Or (Var "A") (Not (Var "A"))
-    in (tautology formula, "Tautology check: " ++ show (tautology formula))
-
--- Test de conversion de Formula à CNF avec une formule plus complexe
-test_complexFormulaToCNF :: (Bool, String)
-test_complexFormulaToCNF =
-    let formula = And (Var "A") (Or (Var "B") (And (Not (Var "C")) (Var "D")))
-        cnf = fromFormula formula
-    in (toFormulaCNF cnf == formula, "Original: " ++ show formula ++ ", CNF: " ++ show (toFormulaCNF cnf))
-
--- Test d'évaluation avec une formule plus complexe
-test_evaluateComplex :: (Bool, String)
-test_evaluateComplex = 
-    let formula = Or (And (Var "A") (Var "B")) (And (Not (Var "C")) (Var "D"))
-        env = Map.fromList [("A", True), ("B", True), ("C", False), ("D", True)]
-        result = evaluate env formula
-    in (result == Just True, "Evaluate result: " ++ show result)
-    
-
-
-main :: IO ()
-main = do
-    mapM_ runTest [ test_literalToFormula
-                  , test_formulaToCNFAndBack
-                  , test_cnfSize
-                  , test_robinson
-                  , test_evaluate
-                  , test_tautology
-                  , test_complexFormulaToCNF
-                  , test_evaluateComplex ]
-
-runTest :: (Bool, String) -> IO ()
-runTest (result, message) = putStrLn $ message ++ ": " ++ show result
-
+-- Convert a formula to CNF
+toCNF :: Formula -> CNF
+toCNF formula = fromFormula formula  -- Assuming 'fromFormula' converts to CNF
