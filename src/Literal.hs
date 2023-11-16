@@ -1,52 +1,45 @@
--- Module d'exportation
-module Literal(
-    Literal(..), 
-    fromBool, 
-    fromPositive, 
-    fromNegative, 
-    neg, 
-    toFormula
-) where
+{-# LANGUAGE KindSignatures #-}
 
--- Importation des dépendances nécessaires
+module Literal(Literal(..), fromBool, fromPositive, fromNegative, neg, toFormula) where
+
 import Data.Kind
-import Formula (Formula(..))  -- Assurez-vous que cet import est correct en fonction de la structure de votre projet
+import Formula (Formula(..))
 
--- | Un élément littéral peut être :
--- | * une constante booléenne
--- | * une variable logique ou sa négation
-data Literal
-    = ConstLit Bool           -- Constante booléenne
-    | PositiveLit String      -- Variable logique positive
-    | NegativeLit String      -- Variable logique négative
-    deriving (Eq, Ord)        -- Dérivation des instances Eq et Ord
+-- | A literal element may be:
+-- | * a boolean constant
+-- | * a logical variable or the negation of it
+data Literal 
+    = LitConst Bool         -- A boolean constant
+    | LitVar String         -- A logical variable
+    | LitNotVar String      -- Negation of a logical variable
+    deriving (Eq, Ord)      -- Deriving Eq and Ord
 
--- Instance de Show pour le type Literal
+-- Show instance for Literal
 instance Show Literal where
-    show (ConstLit b)    = show b
-    show (PositiveLit s) = s
-    show (NegativeLit s) = "¬" ++ s
+  show (LitConst b) = show b
+  show (LitVar v) = v
+  show (LitNotVar v) = "¬" ++ v
 
--- | Conversion d'une valeur booléenne en littéral constant
+-- | Convert boolean value to constant literal
 fromBool :: Bool -> Literal
-fromBool = ConstLit
+fromBool b = LitConst b
 
--- | Conversion d'une variable logique en littéral positif
+-- | Convert logical variable to a positive literal
 fromPositive :: String -> Literal
-fromPositive = PositiveLit
+fromPositive v = LitVar v
 
--- | Conversion d'une variable logique en littéral négatif
+-- | Convert logical variable to a negative literal
 fromNegative :: String -> Literal
-fromNegative = NegativeLit
+fromNegative v = LitNotVar v
 
--- | Opération de négation
+-- | Negation operation
 neg :: Literal -> Literal
-neg (ConstLit b)    = ConstLit (not b)
-neg (PositiveLit s) = NegativeLit s
-neg (NegativeLit s) = PositiveLit s
+neg (LitConst b) = LitConst (not b)
+neg (LitVar v) = LitNotVar v
+neg (LitNotVar v) = LitVar v
 
--- | Conversion d'un littéral en la formule logique correspondante
+-- | Convert a literal to the corresponding logical formula
 toFormula :: Literal -> Formula
-toFormula (ConstLit b)    = Const b
-toFormula (PositiveLit s) = Var s
-toFormula (NegativeLit s) = Not (Var s)
+toFormula (LitConst b) = Const b
+toFormula (LitVar v) = Var v
+toFormula (LitNotVar v) = Not (Var v)
