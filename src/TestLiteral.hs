@@ -1,36 +1,47 @@
-module TestLiteral where
+{-# LANGUAGE KindSignatures #-}
 
+import Test.HUnit
 import Literal
-import Formula (Formula(..))  -- Assurez-vous d'avoir exporté les constructeurs nécessaires
+import Formula (Formula(..))
 
-testFromBool :: Bool
-testFromBool = fromBool True == ConstLit True && fromBool False == ConstLit False
+-- Test cases for fromBool
+testFromBool :: Test
+testFromBool = TestCase $ do
+    assertEqual "fromBool True" (LitConst True) (fromBool True)
+    assertEqual "fromBool False" (LitConst False) (fromBool False)
 
-testFromPositive :: Bool
-testFromPositive = fromPositive "A" == PositiveLit "A"
+-- Test cases for fromPositive
+testFromPositive :: Test
+testFromPositive = TestCase $ do
+    assertEqual "fromPositive 'x'" (LitVar "x") (fromPositive "x")
 
-testFromNegative :: Bool
-testFromNegative = fromNegative "A" == NegativeLit "A"
+-- Test cases for fromNegative
+testFromNegative :: Test
+testFromNegative = TestCase $ do
+    assertEqual "fromNegative 'x'" (LitNotVar "x") (fromNegative "x")
 
-testNeg :: Bool
-testNeg = 
-    neg (ConstLit True) == ConstLit False &&
-    neg (ConstLit False) == ConstLit True &&
-    neg (PositiveLit "A") == NegativeLit "A" &&
-    neg (NegativeLit "A") == PositiveLit "A"
+-- Test cases for neg
+testNeg :: Test
+testNeg = TestCase $ do
+    assertEqual "neg (LitConst True)" (LitConst False) (neg (LitConst True))
+    assertEqual "neg (LitVar 'x')" (LitNotVar "x") (neg (LitVar "x"))
+    assertEqual "neg (LitNotVar 'x')" (LitVar "x") (neg (LitNotVar "x"))
 
-testToFormula :: Bool
-testToFormula = 
-    toFormula (ConstLit True) == Const True &&
-    toFormula (PositiveLit "A") == Var "A" &&
-    toFormula (NegativeLit "A") == Not (Var "A")
+-- Test cases for toFormula
+testToFormula :: Test
+testToFormula = TestCase $ do
+    assertEqual "toFormula (LitConst True)" (Const True) (toFormula (LitConst True))
+    assertEqual "toFormula (LitVar 'x')" (Var "x") (toFormula (LitVar "x"))
+    assertEqual "toFormula (LitNotVar 'x')" (Not (Var "x")) (toFormula (LitNotVar "x"))
 
--- Fonction principale pour exécuter tous les tests
-runTests :: IO ()
-runTests = do
-    putStrLn $ "testFromBool: " ++ show testFromBool
-    putStrLn $ "testFromPositive: " ++ show testFromPositive
-    putStrLn $ "testFromNegative: " ++ show testFromNegative
-    putStrLn $ "testNeg: " ++ show testNeg
-    putStrLn $ "testToFormula: " ++ show testToFormula
+-- Grouping all tests
+tests :: Test
+tests = TestList [TestLabel "testFromBool" testFromBool,
+                  TestLabel "testFromPositive" testFromPositive,
+                  TestLabel "testFromNegative" testFromNegative,
+                  TestLabel "testNeg" testNeg,
+                  TestLabel "testToFormula" testToFormula]
 
+-- Main function to run all tests
+main :: IO Counts
+main = runTestTT tests
