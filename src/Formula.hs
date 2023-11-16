@@ -1,167 +1,134 @@
-
-
--- Module Formula
 module Formula(Formula(..), fromBool, fromString, neg, conj, disj, implies, isLiteral, has, size, variables, Environment, evaluate, (<=>), tautology, simplify) where
 
--- Importation des dépendances nécessaires
 import Data.Kind
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Control.Applicative (liftA2)  -- Add this line
 
--- ** Définition du type de données Formula ** --
-
+-- Definition of the Formula data type
 data Formula 
-    = Const Bool                    -- Une constante booléenne (True ou False)
-    | Var String                    -- Une variable logique
-    | Not Formula                   -- Négation
-    | And Formula Formula           -- Conjonction (ET logique)
-    | Or Formula Formula            -- Disjonction (OU logique)
+    = Const Bool                    -- A boolean constant
+    | Var String                    -- A logical variable
+    | Not Formula                   -- Negation
+    | And Formula Formula           -- Conjunction
+    | Or Formula Formula            -- Disjunction
     | Imp Formula Formula           -- Implication
-    deriving (Show, Eq)             -- Dérivation des instances de Show et Eq
+    deriving Eq                     -- Deriving instance of Eq
 
 
-
--- ** Constructeurs de Formules ** --
-
+-- Convert a boolean value into a constant logical formula
 fromBool :: Bool -> Formula
-fromBool = Const
+fromBool b = Const b
 
--- **Conversion d'une chaîne de caractères en variable de formule ** --
-
+-- Convert a variable name into a formula with only the corresponding logical variable
 fromString :: String -> Formula
-fromString = Var
+fromString s = Var s
 
--- ** Opérations de Base sur les Formules ** --
-
--- Négation d'une formule
-
+-- Negation operation
 neg :: Formula -> Formula
-neg = Not
+neg f = Not f
 
--- Conjonction de deux formules
-
+-- Conjunction operation (logical "and")
 conj :: Formula -> Formula -> Formula
-conj = And
+conj f1 f2 = And f1 f2
 
--- Disjonction de deux formules
-
+-- Disjunction operation (logical "or")
 disj :: Formula -> Formula -> Formula
-disj = Or
+disj f1 f2 = Or f1 f2
 
--- Implication de deux formules
-
+-- Implication operation
 implies :: Formula -> Formula -> Formula
-implies = Imp
+implies f1 f2 = Imp f1 f2
 
--- ** Propriétés des Formules ** --
-
--- Vérification si une formule est un littéral
-
+-- Is the formula a literal?
 isLiteral :: Formula -> Bool
+isLiteral (Const _) = True
 isLiteral (Var _) = True
-isLiteral (Not (Var _)) = True
 isLiteral _ = False
 
--- Vérification si une formule contient une variable spécifique
-
+-- Search for a logical variable in a formula
 has :: Formula -> String -> Bool
-(Var v) `has` name = v == name
-(Not f) `has` name = f `has` name
-(And f1 f2) `has` name = f1 `has` name || f2 `has` name
-(Or f1 f2) `has` name = f1 `has` name || f2 `has` name
-(Imp f1 f2) `has` name = f1 `has` name || f2 `has` name
-_ `has` _ = False
+f `has` v = Set.member v (variables f)
 
--- Calcul de la taille d'une formule
-
+-- Size (number of operators)
 size :: Formula -> Int
-size (Var _) = 0
+size (Const _) = 1
+size (Var _) = 1
 size (Not f) = 1 + size f
 size (And f1 f2) = 1 + size f1 + size f2
 size (Or f1 f2) = 1 + size f1 + size f2
 size (Imp f1 f2) = 1 + size f1 + size f2
-size (Const _) = 0
 
--- Récupération des variables d'une formule
-
+-- Retrieve set of all variables occurring in a formula
 variables :: Formula -> Set String
+variables (Const _) = Set.empty
 variables (Var v) = Set.singleton v
 variables (Not f) = variables f
 variables (And f1 f2) = Set.union (variables f1) (variables f2)
 variables (Or f1 f2) = Set.union (variables f1) (variables f2)
 variables (Imp f1 f2) = Set.union (variables f1) (variables f2)
-variables (Const _) = Set.empty
 
+-- Show instance for Formula
+instance Show Formula where
+  show (Const b) = show b
+  show (Var v) = v
+  show (Not f) = "¬" ++ show f
+  show (And f1 f2) = "(" ++ show f1 ++ " ∧ " ++ show f2 ++ ")"
+  show (Or f1 f2) = "(" ++ show f1 ++ " ∨ " ++ show f2 ++ ")"
+  show (Imp f1 f2) = "(" ++ show f1 ++ " → " ++ show f2 ++ ")"
 
--- Définition du type Environment pour représenter les associations variable/valeur
-
+-- Environment associating logical variables to logical values
 type Environment = Map String Bool
 
--- Évaluation d'une formule dans un environnement donné
-
+-- Evaluation (if possible) of formula in a given environment
+-- Evaluate a Formula given an environment
 evaluate :: Environment -> Formula -> Maybe Bool
 evaluate env (Const b) = Just b
 evaluate env (Var v) = Map.lookup v env
-evaluate env (Not f) = not <$> evaluate env f
-evaluate env (And f1 f2) = do
-    b1 <- evaluate env f1
-    b2 <- evaluate env f2
-    return (b1 && b2)
-evaluate env (Or f1 f2) = do
-    b1 <- evaluate env f1
-    b2 <- evaluate env f2
-    return (b1 || b2)
-evaluate env (Imp f1 f2) = do
-    b1 <- evaluate env f1
-    b2 <- evaluate env f2
-    return (not b1 || b2)
+evaluate env (Not f) = fmap not (evaluate env f)
+evaluate env (And f1 f2) = liftA2 (&&) (evaluate env f1) (evaluate env f2)
+evaluate env (Or f1 f2) = liftA2 (||) (evaluate env f1) (evaluate env f2)
+evaluate env (Imp f1 f2) = liftA2 impliesFunc (evaluate env f1) (evaluate env f2)
+  where
+    -- Helper function for logical implication
+    impliesFunc :: Bool -> Bool -> Bool
+    impliesFunc a b = not a || b
 
--- Vérification de l'équivalence logique de deux formules
-
+-- Logical equivalence on formulae
 (<=>) :: Formula -> Formula -> Bool
-f <=> g = all (\env -> eval f env == eval g env) envs
+f1 <=> f2 = all (\env -> evaluate env f1 == evaluate env f2) allEnvironments
   where
-    vars = Set.union (variables f) (variables g)
-    envs = allEnvironments $ Set.toList vars
-    eval formula env = case evaluate (Map.fromList env) formula of
-      Just val -> val
-      Nothing  -> error "Incomplete environment"
+    allVars = Set.toList $ Set.union (variables f1) (variables f2)
+    allEnvironments = map Map.fromList $ sequence [ [(v, b) | b <- [True, False]] | v <- allVars ]
 
--- Génération de tous les environnements possibles pour une liste de variables
 
-allEnvironments :: [String] -> [[(String, Bool)]]
-allEnvironments [] = [[]]
-allEnvironments (v:vs) =
-  [(v, True) : env | env <- allEnvironments vs] ++
-  [(v, False) : env | env <- allEnvironments vs]
-
--- Vérification si une formule est une tautologie
-
+-- Is the formula a tautology?
 tautology :: Formula -> Bool
-tautology f = all (\env -> eval f env) envs
+tautology f = all (\env -> evaluate env f == Just True) allEnvironments
   where
-    vars = variables f
-    envs = allEnvironments $ Set.toList vars
-    eval formula env = case evaluate (Map.fromList env) formula of
-      Just val -> val
-      Nothing  -> error "Incomplete environment"
+    allVars = Set.toList $ variables f
+    allEnvironments = map Map.fromList $ sequence [ [(v, b) | b <- [True, False]] | v <- allVars ]
 
--- Simplification d'une formule (version rudimentaire)
 
+-- Attempts to simplify the proposition
 simplify :: Formula -> Formula
-simplify (And (Const True) f) = simplify f
-simplify (And f (Const True)) = simplify f
-simplify (And (Const False) _) = Const False
-simplify (And _ (Const False)) = Const False
-simplify (Or (Const True) _) = Const True
-simplify (Or _ (Const True)) = Const True
-simplify (Or (Const False) f) = simplify f
-simplify (Or f (Const False)) = simplify f
-simplify (Not (Const True)) = Const False
-simplify (Not (Const False)) = Const True
-simplify (Not (Not f)) = simplify f
-simplify (Imp f1 f2) = simplify (Or (Not f1) f2)
-simplify f = f  -- Pour les autres cas, on ne simplifie pas
+simplify (And f1 f2) = case (simplify f1, simplify f2) of
+    (Const True, f) -> f
+    (f, Const True) -> f
+    (Const False, _) -> Const False
+    (_, Const False) -> Const False
+    (f1', f2') -> And f1' f2'
+simplify (Or f1 f2) = case (simplify f1, simplify f2) of
+    (Const False, f) -> f
+    (f, Const False) -> f
+    (Const True, _) -> Const True
+    (_, Const True) -> Const True
+    (f1', f2') -> Or f1' f2'
+simplify (Not f) = case simplify f of
+    Const b -> Const (not b)
+    f' -> Not f'
+simplify (Imp f1 f2) = simplify $ Or (Not f1) f2  -- Implication can be expressed as ¬f1 ∨ f2
+simplify f = f  -- For constants and variables
 
