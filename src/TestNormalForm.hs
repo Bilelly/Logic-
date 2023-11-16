@@ -1,55 +1,43 @@
-module TestNormalForm where
-
+import Test.HUnit
 import NormalForm
-import Formula (Formula(..))
+import Formula
 import Literal
 import qualified Data.Set as Set
-import Data.Set (Set)
 
--- Test the conversion from Formula to CNF
-testFromFormula :: Bool
-testFromFormula = 
-    let formula = And (Var "A") (And (Var "B") (Var "C"))
-        actualCNF = fromFormula formula
-        expectedCNF = CNF $ Set.fromList [Set.singleton (fromPositive "A"),
-                                          Set.singleton (fromPositive "B"),
-                                          Set.singleton (fromPositive "C")]
-    in actualCNF == expectedCNF
+-- Test for size function
+-- Test for size function
+testSize :: Test
+testSize = TestCase $ do
+    let cnf = CNF (Set.fromList [Set.fromList [fromPositive "x", fromNegative "y"], Set.fromList [fromPositive "z"]])
+    assertEqual "Size of CNF" 3 (NormalForm.size cnf)  -- Qualify with 'NormalForm.'
+    
+-- Test for toFormula function
+testToFormula :: Test
+testToFormula = TestCase $ do
+    let cnf = CNF (Set.singleton (Set.fromList [fromPositive "x", fromNegative "y"]))
+    assertEqual "Convert CNF to Formula" (And (Or (Var "x") (Not (Var "y"))) (Const True)) (toFormulaCNF cnf)
 
--- Test the conversion from CNF to Formula
-testToFormula :: Bool
-testToFormula = 
-    let cnf = CNF $ Set.fromList [Set.singleton (fromPositive "A"),
-                                  Set.singleton (fromPositive "B"),
-                                  Set.singleton (fromPositive "C")]
-        actualFormula = toFormulaCNF cnf
-        expectedFormula = And (And (Var "A") (Var "B")) (Var "C")
+-- Test for fromFormula function
+testFromFormula :: Test
+testFromFormula = TestCase $ do
+    let formula = And (Var "x") (Not (Var "y"))
+    let expectedCNF = CNF (Set.fromList [Set.fromList [fromPositive "x"], Set.fromList [fromNegative "y"]])
+    assertEqual "Convert Formula to CNF" expectedCNF (fromFormula formula)
 
-    in actualFormula == expectedFormula
+-- Test for robinson function
+testRobinson :: Test
+testRobinson = TestCase $ do
+    let cnf = CNF (Set.fromList [Set.singleton (fromPositive "A"), Set.singleton (fromNegative "A")])
+    let expected = CNF Set.empty  -- Expected result after applying Robinson's rule
+    assertEqual "Apply Robinson's rule" expected (robinson cnf)
 
--- Test Robinson's resolution rule
-testRobinson = 
-    let cnf = CNF $ Set.fromList [Set.fromList [fromPositive "A", fromNegative "B"],
-                                  Set.fromList [fromNegative "A", fromPositive "B"]]
-        result = robinson (getCNF cnf)
-    in case result of
-         Nothing -> False
-         Just resolvent -> Set.member Set.empty resolvent
+-- Grouping all tests
+tests :: Test
+tests = TestList [TestLabel "testSize" testSize,
+                  TestLabel "testToFormula" testToFormula,
+                  TestLabel "testFromFormula" testFromFormula,
+                  TestLabel "testRobinson" testRobinson]
 
-
--- Helper function to get the inner value of CNF
-getCNF :: CNF -> Set (Set Literal)
-getCNF (CNF clauses) = clauses
-
--- Utility function to run tests and print results
-runTests :: IO ()
-runTests = do
-    putStrLn "Running tests..."
-    putStrLn $ "testFromFormula: " ++ (if testFromFormula then "Passed" else "Failed")
-    putStrLn $ "testToFormula: " ++ (if testToFormula then "Passed" else "Failed")
-    putStrLn $ "testRobinson: " ++ (if testRobinson then "Passed" else "Failed")
-    putStrLn "Finished running tests."
-
-main :: IO ()
-main = runTests
-
+-- Main function to run all tests
+main :: IO Counts
+main = runTestTT tests
