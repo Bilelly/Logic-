@@ -2,15 +2,24 @@
 module NormalForm(
     CNF(..), 
     size, 
-    toFormulaCNF, 
+    toFormulaCNF,  -- Use the new name here
     fromFormula, 
     robinson
 ) where
+
 
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Formula (Formula(..))
 import Literal
+import Literal hiding (toFormula)
+import qualified Literal
+import Data.Maybe (catMaybes)
+import Data.Maybe (fromMaybe)  -- Add this import
+
+
+-- Then use Literal.toFormula when referring to the function from the Literal module.
+
 
 
 -- | Une forme normale conjonctive
@@ -22,11 +31,14 @@ instance Show CNF where
 
 -- | Taille (nombre de littéraux)
 size :: CNF -> Int
-size (CNF clauses) = sum (Set.size <$> Set.toList clauses)
+size (CNF clauses) = sum . map Set.size $ Set.toList clauses
+
 
 -- | Conversion de la forme normale en formule logique
 toFormulaCNF :: CNF -> Formula
-toFormulaCNF (CNF clauses) = foldr1 And (map clauseToFormula (Set.toList clauses))
+toFormulaCNF (CNF clauses) = foldr And (Const True) $ map clauseToFormula $ Set.toList clauses
+  where
+    clauseToFormula clause = foldr Or (Const False) $ map Literal.toFormula $ Set.toList clause
 
 -- | Fonction auxiliaire pour convertir une liste de clauses en conjonction
 conjunctClauses :: [Set Literal] -> Formula
@@ -36,7 +48,11 @@ conjunctClauses (c:cs) = And (clauseToFormula c) (conjunctClauses cs)
 
 -- | Fonction auxiliaire pour convertir une clause en Formula
 clauseToFormula :: Set Literal -> Formula
-clauseToFormula clause = foldr1 Or (map literalToFormula (Set.toList clause))
+clauseToFormula clause = 
+    case Set.toList clause of
+      [l] -> Literal.toFormula l
+      ls  -> foldr1 Or (map Literal.toFormula ls)
+
 
 -- | Fonction auxiliaire pour convertir une liste de littéraux en disjonction
 disjunctLiterals :: [Literal] -> Formula
@@ -45,9 +61,12 @@ disjunctLiterals [l]    = literalToFormula l
 disjunctLiterals (l:ls) = Or (literalToFormula l) (disjunctLiterals ls)
 
 -- | Fonction auxiliaire pour convertir un littéral en Formula
+-- | Fonction auxiliaire pour convertir un littéral en Formula
 literalToFormula :: Literal -> Formula
-literalToFormula (PositiveLit n) = Var n
-literalToFormula (NegativeLit n) = Not (Var n)
+literalToFormula (LitConst b) = Const b
+literalToFormula (LitVar v) = Var v
+literalToFormula (LitNotVar v) = Not (Var v)
+
 
 -- | Conversion d'une formule logique en forme normale
 fromFormula :: Formula -> CNF
@@ -56,7 +75,7 @@ fromFormula formula =
       nnf = toNNF formulaNoImp
       distributed = distribute nnf
   in CNF (toCNF distributed)
-
+  
 -- | Élimination des implications de manière récursive
 eliminateImplication :: Formula -> Formula
 eliminateImplication (Imp f g) = Or (Not f) g
@@ -95,25 +114,25 @@ toCNF formula =
       in Set.fromList [Set.fromList [l | lc <- [lClause, rClause], l <- Set.toList lc] 
                        | lClause <- leftClauses, rClause <- rightClauses]
 
--- | Appliquer la règle de ROBINSON sur les clauses
-robinson :: Set (Set Literal) -> Maybe (Set (Set Literal))
-robinson clauses =
-  let pairs = [(c1, c2) | c1 <- Set.toList clauses, c2 <- Set.toList clauses, c1 /= c2] in
-  findResolvent pairs clauses
 
--- | Trouver un résolvant
-findResolvent :: [(Set Literal, Set Literal)] -> Set (Set Literal) -> Maybe (Set (Set Literal))
-findResolvent [] _ = Nothing  -- Cas de base : retourne Nothing si la liste est vide
-findResolvent ((c1, c2):rest) clauses =
-  case resolvent c1 c2 of
-    Just clause -> Just (Set.insert clause clauses)  -- Si un résolvant est trouvé, l'ajoute aux clauses
-    Nothing -> findResolvent rest clauses  -- Sinon, continue la recherche avec le reste des paires
+-- | Apply ROBINSON's rule on CNF clauses
+robinson :: CNF -> CNF
+robinson (CNF clauses) = CNF $ fromMaybe clauses (findResolvent clausePairs clauses)
+  where
+    clausePairs = [(c1, c2) | c1 <- Set.toList clauses, c2 <- Set.toList clauses, c1 /= c2]
 
--- | Trouver un résolvant pour deux clauses données
-resolvent :: Set Literal -> Set Literal -> Maybe (Set Literal)
-resolvent c1 c2 =
-  let lits = [l | l <- Set.toList c1, neg l `Set.member` c2] in  -- Liste des littéraux qui ont leur négation dans l'autre clause
-    if null lits  -- Si la liste est vide, aucun résolvant n'est trouvé
-      then Nothing
-      else Just $ foldr Set.delete c1 lits `Set.union` foldr Set.delete c2 (map neg lits)  -- Sinon, retourne le résolvant obtenu en supprimant les littéraux et leurs négations des clauses originales
+    -- | Find a resolvent for a list of clause pairs
+    findResolvent :: [(Set Literal, Set Literal)] -> Set (Set Literal) -> Maybe (Set (Set Literal))
+    findResolvent [] _ = Nothing
+    findResolvent ((c1, c2):rest) acc =
+      case resolvent c1 c2 of
+        Just clause -> findResolvent rest (Set.insert clause acc)
+        Nothing -> findResolvent rest acc
 
+    -- | Find a resolvent for two given clauses
+    resolvent :: Set Literal -> Set Literal -> Maybe (Set Literal)
+    resolvent c1 c2 =
+      let commonLiterals = Set.intersection c1 (Set.map neg c2)
+      in if Set.null commonLiterals
+         then Nothing
+         else Just $ Set.union (Set.difference c1 commonLiterals) (Set.difference c2 (Set.map neg commonLiterals))
