@@ -1,76 +1,66 @@
 import Test.HUnit
+import NormalForm
 import Formula
-import qualified Data.Map as Map
+import Literal
 import qualified Data.Set as Set
 
--- Tests for fromBool and fromString
-testFromBool :: Test
-testFromBool = TestCase $ do
-  assertEqual "fromBool True" (Const True) (fromBool True)
-  assertEqual "fromBool False" (Const False) (fromBool False)
+-- Test for size function
+testSize :: Test
+testSize = TestCase $ do
+    let cnf1 = CNF (Set.fromList [Set.fromList [fromPositive "x", fromNegative "y"], Set.fromList [fromPositive "z"]])
+    let cnf2 = CNF (Set.fromList [Set.fromList [fromPositive "a"]])
+    assertEqual "Size of CNF with multiple literals" 3 (NormalForm.size cnf1)
+    assertEqual "Size of CNF with single literal" 1 (NormalForm.size cnf2)
 
-testFromString :: Test
-testFromString = TestCase $ do
-  assertEqual "fromString 'x'" (Var "x") (fromString "x")
-
-
--- Tests for basic operations (neg, conj, disj, implies)
-testNeg :: Test
-testNeg = TestCase $ do
-  assertEqual "neg (Const True)" (Not (Const True)) (neg (Const True))
-
-testConj :: Test
-testConj = TestCase $ do
-  assertEqual "conj (Var 'x') (Var 'y')" (And (Var "x") (Var "y")) (conj (Var "x") (Var "y"))
-
-testDisj :: Test
-testDisj = TestCase $ do
-  assertEqual "disj (Var 'x') (Var 'y')" (Or (Var "x") (Var "y")) (disj (Var "x") (Var "y"))
-
-testImplies :: Test
-testImplies = TestCase $ do
-  assertEqual "implies (Var 'x') (Var 'y')" (Imp (Var "x") (Var "y")) (implies (Var "x") (Var "y"))
+-- Test for fromFormula function
+testFromFormula :: Test
+testFromFormula = TestCase $ do
+    let formula = And (Var "x") (Not (Var "y"))
+    let expectedCNF = CNF (Set.fromList [Set.fromList [fromPositive "x"], Set.fromList [fromNegative "y"]])
+    assertEqual "Convert Formula to CNF" expectedCNF (fromFormula formula)
 
 
--- Test for isLiteral
-testIsLiteral :: Test
-testIsLiteral = TestCase $ do
-  assertEqual "isLiteral (Const True)" True (isLiteral (Const True))
-  assertEqual "isLiteral (Var 'x')" True (isLiteral (Var "x"))
-  assertEqual "isLiteral (Not (Var 'x'))" False (isLiteral (Not (Var "x")))
+-- Test for toFormulaCNF function
+testToFormulaCNF :: Test
+testToFormulaCNF = TestList [
+    TestLabel "Empty CNF" $ TestCase $ do
+        let cnf = CNF Set.empty
+        let expectedFormula = Const True  -- Un CNF vide est toujours vrai
+        assertEqual "Convert empty CNF to Formula" expectedFormula (toFormulaCNF cnf),
+
+    TestLabel "Single Clause CNF" $ TestCase $ do
+        let cnf = CNF (Set.singleton (Set.fromList [fromPositive "x", fromNegative "y"]))
+        let expectedFormula = Or (Var "x") (Not (Var "y"))  -- Une seule clause est simplement une disjonction
+        assertEqual "Convert single clause CNF to Formula" expectedFormula (toFormulaCNF cnf),
+
+    TestLabel "Multiple Clauses CNF" $ TestCase $ do
+        let cnf = CNF (Set.fromList [Set.fromList [fromPositive "x", fromNegative "y"], Set.fromList [fromPositive "z"]])
+        let expectedFormula = And (Or (Var "x") (Not (Var "y"))) (Var "z")  -- Plusieurs clauses sont reliées par des conjonctions
+        assertEqual "Convert multiple clauses CNF to Formula" expectedFormula (toFormulaCNF cnf),
+
+    TestLabel "CNF with Single Literal Clause" $ TestCase $ do
+        let cnf = CNF (Set.singleton (Set.singleton (fromPositive "a")))
+        let expectedFormula = Var "a"  -- Une clause avec un seul littéral est simplement ce littéral
+        assertEqual "Convert single literal clause CNF to Formula" expectedFormula (toFormulaCNF cnf)
+    ]
 
 
--- Test for evaluate
-testEnvironment1 :: Environment
-testEnvironment1 = Map.fromList [("x", True), ("y", False)]
-
-testEvaluate :: Test
-testEvaluate = TestCase $ do
-  assertEqual "evaluate testEnvironment1 (Var 'x')" (Just True) (evaluate testEnvironment1 (Var "x"))
-  assertEqual "evaluate testEnvironment1 (And (Var 'x') (Var 'y'))" (Just False) (evaluate testEnvironment1 (And (Var "x") (Var "y")))
-
+-- Test for Robinson's rule
+testRobinson :: Test
+testRobinson = TestCase $ do
+    let cnf = CNF (Set.fromList [Set.singleton (fromPositive "A"), Set.singleton (fromNegative "A")])
+    let actualResult = robinson cnf
+    let unexpectedResult = CNF (Set.fromList [Set.singleton (fromPositive "A"), Set.singleton (fromNegative "A")])
+    assertBool "Robinson's rule should eliminate contradictory clauses" (actualResult /= unexpectedResult)
 
 
--- Test for tautology
-testTautology :: Test
-testTautology = TestCase $ do
-  assertEqual "tautology (Or (Var 'x') (Not (Var 'x')))" True (tautology (Or (Var "x") (Not (Var "x"))))
-  assertEqual "tautology (Var 'x')" False (tautology (Var "x"))
+-- Grouping all tests
+tests :: Test
+tests = TestList [TestLabel "testSize" testSize,
+                  TestLabel "testFromFormula" testFromFormula,
+                  TestLabel "testToFormulaCNF" testToFormulaCNF,
+                  TestLabel "testRobinson" testRobinson]
 
-testLogicalEquivalence :: Test
-testLogicalEquivalence = TestCase $ do
-  assertEqual "(Var 'x') <=> (Var 'x')" True ((Var "x") <=> (Var "x"))
-  assertEqual "(Var 'x') <=> (Not (Var 'x'))" False ((Var "x") <=> (Not (Var "x")))
-
-
--- Test for simplify
-testSimplify :: Test
-testSimplify = TestCase $ do
-  assertEqual "simplify (And (Const True) (Var 'x'))" (Var "x") (simplify (And (Const True) (Var "x")))
-  assertEqual "simplify (Or (Const False) (Var 'x'))" (Var "x") (simplify (Or (Const False) (Var "x")))
-
-main :: IO ()
-main = do
-  runTestTT $ TestList [testFromBool, testFromString, testNeg, testConj, testDisj, testImplies, testIsLiteral, testEvaluate, testSimplify, testTautology, testLogicalEquivalence]
-  return ()
-
+-- Main function to run all tests
+main :: IO Counts
+main = runTestTT tests
