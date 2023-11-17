@@ -36,9 +36,10 @@ size (CNF clauses) = sum . map Set.size $ Set.toList clauses
 
 -- | Conversion de la forme normale en formule logique
 toFormulaCNF :: CNF -> Formula
-toFormulaCNF (CNF clauses) = foldr And (Const True) $ map clauseToFormula $ Set.toList clauses
-  where
-    clauseToFormula clause = foldr Or (Const False) $ map Literal.toFormula $ Set.toList clause
+toFormulaCNF (CNF clauses) = case Set.toList clauses of
+    [] -> Const True  -- Un CNF vide est considéré comme vrai
+    cs -> foldr1 And (map clauseToFormula cs)
+
 
 -- | Fonction auxiliaire pour convertir une liste de clauses en conjonction
 conjunctClauses :: [Set Literal] -> Formula
@@ -46,12 +47,14 @@ conjunctClauses []     = error "Aucune clause à conjoncter"  -- ou gérez ce ca
 conjunctClauses [c]    = clauseToFormula c
 conjunctClauses (c:cs) = And (clauseToFormula c) (conjunctClauses cs)
 
+
 -- | Fonction auxiliaire pour convertir une clause en Formula
 clauseToFormula :: Set Literal -> Formula
-clauseToFormula clause = 
-    case Set.toList clause of
-      [l] -> Literal.toFormula l
-      ls  -> foldr1 Or (map Literal.toFormula ls)
+clauseToFormula clause = case Set.toList clause of
+    [] -> Const False  -- Une clause vide est considérée comme fausse
+    ls -> foldr1 Or (map Literal.toFormula ls)
+
+
 
 
 -- | Fonction auxiliaire pour convertir une liste de littéraux en disjonction
@@ -60,7 +63,7 @@ disjunctLiterals []     = error "Aucun littéral à disjoncter"  -- ou gérez ce
 disjunctLiterals [l]    = literalToFormula l
 disjunctLiterals (l:ls) = Or (literalToFormula l) (disjunctLiterals ls)
 
--- | Fonction auxiliaire pour convertir un littéral en Formula
+
 -- | Fonction auxiliaire pour convertir un littéral en Formula
 literalToFormula :: Literal -> Formula
 literalToFormula (LitConst b) = Const b
