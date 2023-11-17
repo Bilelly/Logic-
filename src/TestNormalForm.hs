@@ -24,6 +24,8 @@ testFromFormula = TestCase $ do
     let expectedCNF = CNF (Set.fromList [Set.fromList [fromPositive "x"], Set.fromList [fromNegative "y"]])
     assertEqual "Convert Formula to CNF" expectedCNF (fromFormula formula)
 
+
+
 -- Test for robinson function
 testRobinson :: Test
 testRobinson = TestCase $ do
