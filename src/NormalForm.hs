@@ -1,130 +1,152 @@
--- Importation des modules nécessaires
-import Test.HUnit
-import NormalForm
-import Formula
-import Literal
+-- Module NormalForm
+module NormalForm(
+    CNF(..), size, toFormulaCNF,  fromFormula, robinson, distribute
+) where
+
+
+import Data.Set (Set)
 import qualified Data.Set as Set
-
--- Test pour vérifier la taille d'une forme normale conjonctive (CNF)
-testSize :: Test
-testSize = TestCase $ do
-    let cnf1 = CNF (Set.fromList [Set.fromList [fromPositive "x", fromNegative "y"], Set.fromList [fromPositive "z"]])
-    let cnf2 = CNF (Set.singleton (Set.singleton (fromPositive "a")))
-    assertEqual "Size of CNF with multiple literals" 3 (NormalForm.size cnf1)
-    assertEqual "Size of CNF with single literal" 1 (NormalForm.size cnf2)
-
--- Test pour convertir une CNF en formule
-
-testToFormulaCNF :: Test
-testToFormulaCNF = TestList [
-    -- Tests existants
-    TestLabel "Empty CNF to Formula" $ TestCase $ do
-        let cnf = CNF Set.empty
-        assertEqual "Convert empty CNF to Formula" (Const True) (toFormulaCNF cnf),
-
-    TestLabel "Single Clause CNF to Formula" $ TestCase $ do
-        let cnf = CNF (Set.singleton (Set.fromList [fromPositive "x", fromNegative "y"]))
-        let expectedFormula = Or (Var "x") (Not (Var "y"))
-        assertEqual "Convert single clause CNF to Formula" expectedFormula (toFormulaCNF cnf),
-
-    -- Nouveaux tests
-    TestLabel "Multiple Clauses CNF to Formula" $ TestCase $ do
-        let cnf = CNF (Set.fromList [
-                        Set.fromList [fromPositive "x", fromPositive "y"],
-                        Set.fromList [fromNegative "z"]
-                      ])
-        let expectedFormula = And (Or (Var "x") (Var "y")) (Not (Var "z"))
-        assertEqual "Convert multiple clauses CNF to Formula" expectedFormula (toFormulaCNF cnf),
-        
-    TestLabel "Mixed literals CNF to Formula" $ TestCase $ do
-        let cnf = CNF (Set.fromList [
-                    Set.fromList [fromPositive "x", fromNegative "y"],
-                    Set.fromList [fromPositive "z", fromNegative "w"]
-                  ])
-        let expectedFormula = And (Or (Var "x") (Not (Var "y"))) (Or (Var "z") (Not (Var "w")))
-        assertEqual "Convert mixed literals CNF to Formula" expectedFormula (toFormulaCNF cnf)
-    ]
+import Formula (Formula(..))
+import Literal
+import Literal hiding (toFormula)
+import qualified Literal
+import Data.Maybe (catMaybes)
+import Data.Maybe (fromMaybe)  -- Add this import
 
 
--- Test pour convertir une formule simple en CNF
-testFromFormula :: Test
-testFromFormula = TestList [
-    -- Tests existants
-    TestLabel "Simple Formula to CNF" $ TestCase $ do
-        let formula = And (Var "x") (Not (Var "y"))
-        let expectedCNF = CNF (Set.fromList [Set.fromList [fromPositive "x"], Set.fromList [fromNegative "y"]])
-        assertEqual "Convert simple Formula to CNF" expectedCNF (fromFormula formula),
+-- Then use Literal.toFormula when referring to the function from the Literal module.
 
-    -- Nouveaux tests ajoutés
-    TestLabel "Complex Formula to CNF" $ TestCase $ do
-        let formula = And (Var "x") (Or (Var "y") (Not (Var "z")))
-        let expectedCNF = CNF (Set.fromList [
-                                 Set.fromList [fromPositive "x", fromPositive "y"],
-                                 Set.fromList [fromPositive "x", fromNegative "z"]
-                               ])
-        assertEqual "Convert complex Formula to CNF" expectedCNF (fromFormula formula),
 
-    TestLabel "Implication Formula to CNF" $ TestCase $ do
-        let formula = Imp (Var "x") (Var "y")
-        let expectedCNF = CNF (Set.fromList [Set.fromList [fromNegative "x", fromPositive "y"]])
-        assertEqual "Convert Implication Formula to CNF" expectedCNF (fromFormula formula),
 
-    -- Ajout de nouveaux tests
-    TestLabel "Nested Formulas to CNF" $ TestCase $ do
-        let formula = Or (And (Var "a") (Var "b")) (Not (And (Var "c") (Var "d")))
-        let expectedCNF = CNF (Set.fromList [
-                                 Set.fromList [fromPositive "a", fromNegative "c"],
-                                 Set.fromList [fromPositive "a", fromNegative "d"],
-                                 Set.fromList [fromPositive "b", fromNegative "c"],
-                                 Set.fromList [fromPositive "b", fromNegative "d"]
-                               ])
-        assertEqual "Convert nested formulas to CNF" expectedCNF (fromFormula formula),
+-- | Une forme normale conjonctive
+newtype CNF = CNF (Set (Set Literal))
+  deriving Eq
 
-    TestLabel "Disjunction of Implications to CNF" $ TestCase $ do
-        let formula = Or (Imp (Var "a") (Var "b")) (Imp (Var "c") (Var "d"))
-        let expectedCNF = CNF (Set.fromList [
-                                 Set.fromList [fromNegative "a", fromPositive "b", fromNegative "c"],
-                                 Set.fromList [fromNegative "a", fromPositive "b", fromPositive "d"]
-                               ])
-        assertEqual "Convert disjunction of implications to CNF" expectedCNF (fromFormula formula)
-    ]
+instance Show CNF where
+  show (CNF clauses) = unwords . map show . Set.toList $ clauses
+
+-- | Taille (nombre de littéraux)
+size :: CNF -> Int
+size (CNF clauses) = sum . map Set.size $ Set.toList clauses
+
+
+-- | Conversion de la forme normale en formule logique
+toFormulaCNF :: CNF -> Formula
+toFormulaCNF (CNF clauses) = case Set.toList clauses of
+    [] -> Const True  -- Un CNF vide est considéré comme vrai
+    cs -> foldr1 And (map clauseToFormula cs)
+
+
+-- | Fonction auxiliaire pour convertir une liste de clauses en conjonction
+conjunctClauses :: [Set Literal] -> Formula
+conjunctClauses []     = error "Aucune clause à conjoncter"  -- ou gérez ce cas comme vous le souhaitez
+conjunctClauses [c]    = clauseToFormula c
+conjunctClauses (c:cs) = And (clauseToFormula c) (conjunctClauses cs)
+
+
+-- | Fonction auxiliaire pour convertir une clause en Formula
+clauseToFormula :: Set Literal -> Formula
+clauseToFormula clause = case Set.toList clause of
+    [] -> Const False  -- Une clause vide est considérée comme fausse
+    ls -> foldr1 Or (map Literal.toFormula ls)
 
 
 
 
--- Test de l'algorithme de Robinson pour la résolution de clauses
-testRobinson :: Test
-testRobinson = TestCase $ do
-  let clause1 = Set.fromList [fromPositive "A", fromNegative "B"]
-      clause2 = Set.fromList [fromNegative "A", fromPositive "B"]
-      clause3 = Set.fromList [fromPositive "C", fromPositive "D"]
-      clause4 = Set.fromList [fromNegative "C", fromNegative "D"]
-      cnf = CNF $ Set.fromList [clause1, clause2, clause3, clause4]
+-- | Fonction auxiliaire pour convertir une liste de littéraux en disjonction
+disjunctLiterals :: [Literal] -> Formula
+disjunctLiterals []     = error "Aucun littéral à disjoncter"  -- ou gérez ce cas comme vous le souhaitez
+disjunctLiterals [l]    = literalToFormula l
+disjunctLiterals (l:ls) = Or (literalToFormula l) (disjunctLiterals ls)
 
-  let result = robinson cnf
-  assertEqual "resolves complementary literals" result (CNF (Set.singleton Set.empty))
 
--- Test pour vérifier que Robinson laisse les clauses non résolvables inchangées
-testRobinson2 :: Test
-testRobinson2 = TestCase $ do
-  let clause1 = Set.fromList [fromPositive "A", fromPositive "B"]
-      clause2 = Set.fromList [fromNegative "C", fromNegative "D"]
-      cnf = CNF $ Set.fromList [clause1, clause2]
+-- | Fonction auxiliaire pour convertir un littéral en Formula
+literalToFormula :: Literal -> Formula
+literalToFormula (LitConst b) = Const b
+literalToFormula (LitVar v) = Var v
+literalToFormula (LitNotVar v) = Not (Var v)
 
-  let result = robinson cnf
-  assertEqual "leaves non-resolvable clauses unchanged" result (CNF $ Set.fromList [clause1, clause2])
 
--- Test pour vérifier la distribution de 'And' sur 'Or'
-testDistribute :: Test
-testDistribute = TestList [
-    TestLabel "Distribute And over Or" $ TestCase $ do
-        let formula = And (Var "x") (Or (Var "y") (Var "z"))
-        let expectedFormula = Or (And (Var "x") (Var "y")) (And (Var "x") (Var "z"))
-        assertEqual "Distribute And over Or" expectedFormula (distribute formula)
-    ]
+-- | Conversion d'une formule logique en forme normale
+fromFormula :: Formula -> CNF
+fromFormula formula = 
+  let formulaNoImp = eliminateImplication formula
+      nnf = toNNF formulaNoImp
+      distributed = distribute nnf
+  in CNF (toCNF distributed)
+  
+-- | Élimination des implications de manière récursive
+eliminateImplication :: Formula -> Formula
+eliminateImplication (Imp f g) = Or (Not f) g
+eliminateImplication (And f1 f2) = And (eliminateImplication f1) (eliminateImplication f2)
+eliminateImplication f = f
 
--- Fonction principale pour exécuter tous les tests
-main :: IO ()
-main = do
-    runTestTT $ TestList [testSize, testToFormulaCNF, testFromFormula, testRobinson, testDistribute]
-    return ()
+-- | Conversion de la formule en NNF
+toNNF :: Formula -> Formula
+toNNF (Not (And f1 f2)) = Or (toNNF (Not f1)) (toNNF (Not f2))
+toNNF (Not (Or f1 f2)) = And (toNNF (Not f1)) (toNNF (Not f2))
+toNNF (Not (Not f)) = toNNF f
+toNNF (And f1 f2) = And (toNNF f1) (toNNF f2)
+toNNF (Or f1 f2) = Or (toNNF f1) (toNNF f2)
+toNNF f = f
+
+-- | Distribution de And sur Or
+distribute :: Formula -> Formula
+distribute (And f1 (Or f2 f3)) = Or (distribute (And f1 f2)) (distribute (And f1 f3))
+distribute (And (Or f1 f2) f3) = Or (distribute (And f1 f3)) (distribute (And f2 f3))
+distribute (And f1 f2) = And (distribute f1) (distribute f2)
+distribute (Or f1 f2)  = Or (distribute f1) (distribute f2)
+distribute f = f  -- parfait 
+
+--CNF -- Pour les Claues les plus complex -- LA ON A UN PROBLEME --
+toCNF :: Formula -> Set (Set Literal)
+toCNF formula = case formula of
+    Const b -> Set.singleton (Set.singleton (fromBool b))
+    Var s -> Set.singleton (Set.singleton (fromPositive s))
+    Not f -> case f of
+        Var v -> Set.singleton (Set.singleton (fromNegative v))
+        _ -> applyDeMorgan (toCNF (Not f))
+    And f1 f2 -> Set.union (toCNF f1) (toCNF f2)
+    Or f1 f2 -> distributeOr (toCNF f1) (toCNF f2)
+
+
+-- Helper function to distribute 'Or' over 'And' in CNF
+distributeOr :: Set (Set Literal) -> Set (Set Literal) -> Set (Set Literal)
+distributeOr leftCNF rightCNF 
+    | Set.null leftCNF = rightCNF
+    | Set.null rightCNF = leftCNF
+    | otherwise = Set.fromList [Set.union leftClause rightClause | leftClause <- Set.toList leftCNF, rightClause <- Set.toList rightCNF]
+
+
+-- Apply De Morgan's Laws for Not
+applyDeMorgan :: Set (Set Literal) -> Set (Set Literal)
+applyDeMorgan cnf = Set.map (Set.map neg) (Set.fromList [Set.fromList negated | clause <- Set.toList cnf, let negated = Set.toList (Set.map neg clause)])
+
+
+-- | Apply ROBINSON's rule on CNF clauses
+robinson :: CNF -> CNF
+robinson (CNF clauses) = CNF $ fromMaybe clauses (findResolvent clausePairs clauses)
+  where
+    clausePairs = [(c1, c2) | c1 <- Set.toList clauses, c2 <- Set.toList clauses, c1 /= c2]
+
+    findResolvent :: [(Set Literal, Set Literal)] -> Set (Set Literal) -> Maybe (Set (Set Literal))
+    findResolvent [] acc = Just acc
+    findResolvent ((c1, c2):rest) acc =
+      case resolvent c1 c2 of
+        Just clause -> findResolvent rest (Set.insert clause (Set.delete c1 (Set.delete c2 acc)))
+        Nothing -> findResolvent rest acc
+
+
+    -- | Find a resolvent for two given clauses
+    resolvent :: Set Literal -> Set Literal -> Maybe (Set Literal)
+    resolvent c1 c2 =
+      let commonLiterals = Set.intersection c1 (Set.map neg c2)
+      in if Set.null commonLiterals
+          then Nothing
+        else if hasTautology (Set.union c1 c2)
+          then Nothing
+          else Just $ Set.union (Set.difference c1 commonLiterals) (Set.difference c2 (Set.map neg commonLiterals))
+
+    hasTautology :: Set Literal -> Bool
+    hasTautology clause = Set.size clause /= Set.size (Set.map neg clause)
+
